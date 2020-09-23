@@ -1160,7 +1160,7 @@ class _NestedScrollPosition extends ScrollPosition
           oldPosition: oldPosition,
           debugLabel: debugLabel,
         ) {
-    if (pixels == null && initialPixels != null) {
+    if (!hasPixels && initialPixels != null) {
       correctPixels(initialPixels);
     }
     if (activity == null) {
