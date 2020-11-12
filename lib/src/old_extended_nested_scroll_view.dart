@@ -191,18 +191,15 @@ class NestedScrollView extends StatefulWidget {
     @required this.body,
     this.dragStartBehavior = DragStartBehavior.start,
     this.floatHeaderSlivers = false,
+    this.clipBehavior = Clip.hardEdge,
+    this.restorationId,
   })  : assert(scrollDirection != null),
         assert(reverse != null),
         assert(headerSliverBuilder != null),
         assert(body != null),
+        assert(floatHeaderSlivers != null),
+        assert(clipBehavior != null),
         super(key: key);
-
-  /// Whether or not the [NestedScrollView]'s coordinator should prioritize the
-  /// outer scrollable over the inner when scrolling back.
-  ///
-  /// This is useful for an outer scrollable containing a [SliverAppBar] that
-  /// is expected to float. This cannot be null.
-  final bool floatHeaderSlivers;
 
   /// An object that can be used to control the position to which the outer
   /// scroll view is scrolled.
@@ -272,6 +269,21 @@ class NestedScrollView extends StatefulWidget {
 
   /// {@macro flutter.widgets.scrollable.dragStartBehavior}
   final DragStartBehavior dragStartBehavior;
+
+  /// Whether or not the [NestedScrollView]'s coordinator should prioritize the
+  /// outer scrollable over the inner when scrolling back.
+  ///
+  /// This is useful for an outer scrollable containing a [SliverAppBar] that
+  /// is expected to float. This cannot be null.
+  final bool floatHeaderSlivers;
+
+  /// {@macro flutter.widgets.Clip}
+  ///
+  /// Defaults to [Clip.hardEdge].
+  final Clip clipBehavior;
+
+  /// {@macro flutter.widgets.scrollable.restorationId}
+  final String restorationId;
 
   /// Returns the [SliverOverlapAbsorberHandle] of the nearest ancestor
   /// [NestedScrollView].
@@ -421,6 +433,8 @@ class NestedScrollViewState extends State<NestedScrollView> {
               _lastHasScrolledBody,
             ),
             handle: _absorberHandle,
+            clipBehavior: widget.clipBehavior,
+            restorationId: widget.restorationId,
           );
         },
       ),
@@ -436,7 +450,9 @@ class _NestedScrollViewCustomScrollView extends CustomScrollView {
     @required ScrollController controller,
     @required List<Widget> slivers,
     @required this.handle,
+    @required Clip clipBehavior,
     DragStartBehavior dragStartBehavior = DragStartBehavior.start,
+    String restorationId,
   }) : super(
           scrollDirection: scrollDirection,
           reverse: reverse,
@@ -444,6 +460,8 @@ class _NestedScrollViewCustomScrollView extends CustomScrollView {
           controller: controller,
           slivers: slivers,
           dragStartBehavior: dragStartBehavior,
+          restorationId: restorationId,
+          clipBehavior: clipBehavior,
         );
 
   final SliverOverlapAbsorberHandle handle;
@@ -461,6 +479,7 @@ class _NestedScrollViewCustomScrollView extends CustomScrollView {
       offset: offset,
       slivers: slivers,
       handle: handle,
+      clipBehavior: clipBehavior,
     );
   }
 }
@@ -729,7 +748,8 @@ class _NestedScrollCoordinator
   _NestedScrollMetrics _getMetrics(
       _NestedScrollPosition innerPosition, double velocity) {
     assert(innerPosition != null);
-    double pixels, minRange, maxRange, correctionOffset, extra;
+    double pixels, minRange, maxRange, correctionOffset;
+    double extra = 0.0;
     if (innerPosition.pixels == innerPosition.minScrollExtent) {
       pixels = _outerPosition.pixels.clamp(
               _outerPosition.minScrollExtent, _outerPosition.maxScrollExtent)
@@ -738,7 +758,6 @@ class _NestedScrollCoordinator
       maxRange = _outerPosition.maxScrollExtent;
       assert(minRange <= maxRange);
       correctionOffset = 0.0;
-      extra = 0.0;
     } else {
       assert(innerPosition.pixels != innerPosition.minScrollExtent);
       if (innerPosition.pixels < innerPosition.minScrollExtent) {
@@ -924,28 +943,27 @@ class _NestedScrollCoordinator
     if (_innerPositions.isEmpty) {
       _outerPosition.applyFullDragUpdate(delta);
     } else if (delta < 0.0) {
-      // dragging "up"
-      // TODO(ianh): prioritize first getting rid of overscroll, and then the
-      // outer view, so that the app bar will scroll out of the way asap.
-      // Right now we ignore overscroll. This works fine on Android but looks
-      // weird on iOS if you fling down then up. The problem is it's not at all
-      // clear what this should do when you have multiple inner positions at
-      // different levels of overscroll.
-      final double innerDelta = _outerPosition.applyClampedDragUpdate(delta);
-
-      ///this is a bug that the out postion is not overscroll actually and it get minimal value
-      ///do under code will scroll inner positions
-      ///so i igore  minimal value here(value like following data)
-      ///  I/flutter (14963): 5.684341886080802e-14
-      /// I/flutter (14963): -5.684341886080802e-14
-      /// I/flutter (14963): -5.684341886080802e-14
-      /// I/flutter (14963): 5.684341886080802e-14
-      /// I/flutter (14963): -5.684341886080802e-14
-      /// I/flutter (14963): -5.684341886080802e-14
-      /// I/flutter (14963): -5.684341886080802e-14
-      if (innerDelta != 0.0 && innerDelta.abs() > 0.0001) {
-        for (final _NestedScrollPosition position in _currentInnerPositions) {
-          position.applyFullDragUpdate(innerDelta);
+      // Dragging "up"
+      // Prioritize getting rid of any inner overscroll, and then the outer
+      // view, so that the app bar will scroll out of the way asap.
+      double outerDelta = delta;
+      for (final _NestedScrollPosition position in _innerPositions) {
+        if (position.pixels < 0.0) {
+          // This inner position is in overscroll.
+          final double potentialOuterDelta =
+              position.applyClampedDragUpdate(delta);
+          // In case there are multiple positions in varying states of
+          // overscroll, the first to 'reach' the outer view above takes
+          // precedence.
+          outerDelta = math.max(outerDelta, potentialOuterDelta);
+        }
+      }
+      if (outerDelta != 0.0) {
+        final double innerDelta =
+            _outerPosition.applyClampedDragUpdate(outerDelta);
+        if (innerDelta != 0.0) {
+          for (final _NestedScrollPosition position in _innerPositions)
+            position.applyFullDragUpdate(innerDelta);
         }
       }
     } else {
@@ -974,7 +992,12 @@ class _NestedScrollCoordinator
         }
         if (outerDelta != 0.0)
           outerDelta -= _outerPosition.applyClampedDragUpdate(outerDelta);
-        // now deal with any overscroll
+
+        // Now deal with any overscroll
+        // TODO(Piinks): Configure which scrollable receives overscroll to
+        // support stretching app bars. createOuterBallisticScrollActivity will
+        // need to be updated as it currently assumes the outer position will
+        // never overscroll, https://github.com/flutter/flutter/issues/54059
         for (int i = 0; i < innerPositions.length; ++i) {
           final double remainingDelta = overscrolls[i] - outerDelta;
           if (remainingDelta > 0.0)
