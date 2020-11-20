@@ -752,8 +752,7 @@ class _NestedScrollCoordinator
     double extra = 0.0;
     if (innerPosition.pixels == innerPosition.minScrollExtent) {
       pixels = _outerPosition.pixels.clamp(
-              _outerPosition.minScrollExtent, _outerPosition.maxScrollExtent)
-          as double; // TODO(ianh): gracefully handle out-of-range outer positions
+              _outerPosition.minScrollExtent, _outerPosition.maxScrollExtent); // TODO(ianh): gracefully handle out-of-range outer positions
       minRange = _outerPosition.minScrollExtent;
       maxRange = _outerPosition.maxScrollExtent;
       assert(minRange <= maxRange);
@@ -829,8 +828,7 @@ class _NestedScrollCoordinator
   double unnestOffset(double value, _NestedScrollPosition source) {
     if (source == _outerPosition)
       return value.clamp(
-              _outerPosition.minScrollExtent, _outerPosition.maxScrollExtent)
-          as double;
+              _outerPosition.minScrollExtent, _outerPosition.maxScrollExtent);
     if (value < source.minScrollExtent)
       return value - source.minScrollExtent + _outerPosition.minScrollExtent;
     return value - source.minScrollExtent + _outerPosition.maxScrollExtent;
@@ -839,8 +837,7 @@ class _NestedScrollCoordinator
   double nestOffset(double value, _NestedScrollPosition target) {
     if (target == _outerPosition)
       return value.clamp(
-              _outerPosition.minScrollExtent, _outerPosition.maxScrollExtent)
-          as double;
+              _outerPosition.minScrollExtent, _outerPosition.maxScrollExtent);
     if (value < _outerPosition.minScrollExtent)
       return value - _outerPosition.minScrollExtent + target.minScrollExtent;
     if (value > _outerPosition.maxScrollExtent)
@@ -1296,15 +1293,19 @@ class _NestedScrollPosition extends ScrollPosition
 
   Key setScrollPositionKey() {
     //if (haveDimensions) {
+    final ScrollableState ctx = context;
 
-    final NestedScrollViewInnerScrollPositionKeyWidget keyWidget =
-        (context as ScrollableState)?.context?.findAncestorWidgetOfExactType<
-            NestedScrollViewInnerScrollPositionKeyWidget>();
-    _key = keyWidget?.scrollPositionKey;
+    if (ctx.mounted) {
+      final NestedScrollViewInnerScrollPositionKeyWidget keyWidget =
+      (context as ScrollableState)?.context?.findAncestorWidgetOfExactType<
+          NestedScrollViewInnerScrollPositionKeyWidget>();
+      _key = keyWidget?.scrollPositionKey;
 //
 //    var b= a.widget.viewportBuilder(a.context,this);
-    // (this.context as ScrollableState).widget.viewportBuilder()
-    //print(_key);
+      // (this.context as ScrollableState).widget.viewportBuilder()
+      //print(_key);
+    }
+
     return _key;
   }
 
@@ -1344,7 +1345,7 @@ class _NestedScrollPosition extends ScrollPosition
         delta > 0.0 ? double.infinity : math.max(maxScrollExtent, pixels);
 
     final double oldPixels = pixels;
-    final double newPixels = (pixels - delta).clamp(min, max) as double;
+    final double newPixels = (pixels - delta).clamp(min, max);
     final double clampedDelta = newPixels - pixels;
     if (clampedDelta == 0.0) {
       return delta;
@@ -1624,7 +1625,7 @@ class _NestedOuterBallisticScrollActivity extends BallisticScrollActivity {
         done = true;
       }
     } else {
-      value = value.clamp(metrics.minRange, metrics.maxRange) as double;
+      value = value.clamp(metrics.minRange, metrics.maxRange);
       done = true;
     }
     final bool result = super.applyMoveTo(value + metrics.correctionOffset);
