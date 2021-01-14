@@ -613,7 +613,7 @@ class _NestedScrollCoordinator
 
   bool get hasScrolledBody {
     for (final _NestedScrollPosition position in _currentInnerPositions) {
-      assert(position.minScrollExtent != null && position.pixels != null);
+      assert(position.minScrollExtent != null && position.physics != null);
       if (position.pixels > position.minScrollExtent) {
         return true;
       }
@@ -901,6 +901,64 @@ class _NestedScrollCoordinator
 
     goIdle();
     updateUserScrollDirection(
+        delta < 0.0 ? ScrollDirection.forward : ScrollDirection.reverse);
+
+    if (_innerPositions.isEmpty) {
+      // Does not enter overscroll.
+      _outerPosition.applyClampedPointerSignalUpdate(delta);
+    } else if (delta > 0.0) {
+      // Dragging "up" - delta is positive
+      // Prioritize getting rid of any inner overscroll, and then the outer
+      // view, so that the app bar will scroll out of the way asap.
+      double outerDelta = delta;
+      for (final _NestedScrollPosition position in _currentInnerPositions) {
+        if (position.pixels < 0.0) {
+          // This inner position is in overscroll.
+          final double potentialOuterDelta =
+              position.applyClampedPointerSignalUpdate(delta);
+          // In case there are multiple positions in varying states of
+          // overscroll, the first to 'reach' the outer view above takes
+          // precedence.
+          outerDelta = math.max(outerDelta, potentialOuterDelta);
+        }
+      }
+      if (outerDelta != 0.0) {
+        final double innerDelta =
+            _outerPosition.applyClampedPointerSignalUpdate(outerDelta);
+        if (innerDelta != 0.0) {
+          for (final _NestedScrollPosition position in _currentInnerPositions)
+            position.applyClampedPointerSignalUpdate(innerDelta);
+        }
+      }
+    } else {
+      // Dragging "down" - delta is negative
+      double innerDelta = delta;
+      // Apply delta to the outer header first if it is configured to float.
+      if (_floatHeaderSlivers)
+        innerDelta = _outerPosition.applyClampedPointerSignalUpdate(delta);
+
+      if (innerDelta != 0.0) {
+        // Apply the innerDelta, if we have not floated in the outer scrollable,
+        // any leftover delta after this will be passed on to the outer
+        // scrollable by the outerDelta.
+        double outerDelta = 0.0; // it will go negative if it changes
+        for (final _NestedScrollPosition position in _currentInnerPositions) {
+          final double overscroll =
+              position.applyClampedPointerSignalUpdate(innerDelta);
+          outerDelta = math.min(outerDelta, overscroll);
+        }
+        if (outerDelta != 0.0)
+          _outerPosition.applyClampedPointerSignalUpdate(outerDelta);
+      }
+    }
+    goBallistic(0.0);
+  }
+
+  void pointerScroll(double delta) {
+    assert(delta != 0.0);
+
+    goIdle();
+    updateUserScrollDirection(
         delta < 0.0 ? ScrollDirection.forward : ScrollDirection.reverse
     );
 
@@ -1001,7 +1059,7 @@ class _NestedScrollCoordinator
       // Prioritize getting rid of any inner overscroll, and then the outer
       // view, so that the app bar will scroll out of the way asap.
       double outerDelta = delta;
-      for (final _NestedScrollPosition position in _innerPositions) {
+      for (final _NestedScrollPosition position in _currentInnerPositions) {
         if (position.pixels < 0.0) {
           // This inner position is in overscroll.
           final double potentialOuterDelta =
@@ -1400,17 +1458,16 @@ class _NestedScrollPosition extends ScrollPosition
   double applyClampedPointerSignalUpdate(double delta) {
     assert(delta != 0.0);
 
-    final double min = delta > 0.0
-        ? -double.infinity
-        : math.min(minScrollExtent, pixels);
+    final double min =
+        delta > 0.0 ? -double.infinity : math.min(minScrollExtent, pixels);
     // The logic for max is equivalent but on the other side.
-    final double max = delta < 0.0
-        ? double.infinity
-        : math.max(maxScrollExtent, pixels);
-    final double newPixels = (pixels + delta).clamp(min, max).toDouble();
+    final double max =
+        delta < 0.0 ? double.infinity : math.max(maxScrollExtent, pixels);
+    final double newPixels = (pixels + delta).clamp(min, max) as double;
     final double clampedDelta = newPixels - pixels;
-    if (clampedDelta == 0.0)
+    if (clampedDelta == 0.0) {
       return delta;
+    }
     forcePixels(newPixels);
     didUpdateScrollPositionBy(clampedDelta);
     return delta - clampedDelta;
@@ -1495,10 +1552,10 @@ class _NestedScrollPosition extends ScrollPosition
     return coordinator.jumpTo(coordinator.unnestOffset(value, this));
   }
 
-  @override
-  void pointerScroll(double delta) {
-    return coordinator.pointerScroll(delta);
-  }
+  // @override
+  // void pointerScroll(double delta) {
+  //   return coordinator.pointerScroll(delta);
+  // }
 
   @override
   void jumpToWithoutSettling(double value) {
