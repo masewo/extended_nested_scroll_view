@@ -1303,7 +1303,7 @@ class _NestedScrollPosition extends ScrollPosition
 
   Key? setScrollPositionKey() {
     //if (haveDimensions) {
-    final ScrollableState ctx = context;
+    final ScrollableState ctx = context as ScrollableState;
 
     if (ctx.mounted) {
       final NestedScrollViewInnerScrollPositionKeyWidget? keyWidget =
