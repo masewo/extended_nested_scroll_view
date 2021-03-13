@@ -1,3 +1,13 @@
+## 3.0.0
+
+* Support null-safety
+* Breaking change: Remove [NestedScrollViewRefreshIndicator], use [PullToRefreshNotification] instead of.
+* Add [NestedScrollView.keyboardDismissBehavior]
+  
+## 2.0.1
+
+* Fix issue that list sync issue is not fixed #40
+
 ## 2.0.0
 
 * Breaking change: add clipBehavior and restorationId
